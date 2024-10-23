@@ -13,8 +13,10 @@ import com.zenith.qa.model.entity.App;
 import com.zenith.qa.model.entity.User;
 import com.zenith.qa.model.entity.UserAnswer;
 
+import com.zenith.qa.model.enums.ReviewStatusEnum;
 import com.zenith.qa.model.vo.UserAnswerVO;
 import com.zenith.qa.model.vo.UserVO;
+import com.zenith.qa.scoring.ScoringStrategyExecutor;
 import com.zenith.qa.service.AppService;
 import com.zenith.qa.service.UserAnswerService;
 import com.zenith.qa.service.UserService;
@@ -69,6 +71,10 @@ public class UserAnswerServiceImpl extends ServiceImpl<UserAnswerMapper, UserAns
             App byId = appService.getById(appId);
             // 判断该对象不能为空
             ThrowUtils.throwIf(byId == null, ErrorCode.PARAMS_ERROR, "应用不存在");
+            // 判断该对象是否过审
+            if (ReviewStatusEnum.APPROVED.equals(ReviewStatusEnum.getEnumByCode(byId.getReviewStatus()))) {
+                ThrowUtils.throwIf(byId == null, ErrorCode.NO_AUTH_ERROR, "应用未通过审核，无法答题");
+            }
         }
     }
 

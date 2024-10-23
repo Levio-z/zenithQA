@@ -2,10 +2,7 @@ package com.zenith.qa.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.zenith.qa.annotation.AuthCheck;
-import com.zenith.qa.common.BaseResponse;
-import com.zenith.qa.common.DeleteRequest;
-import com.zenith.qa.common.ErrorCode;
-import com.zenith.qa.common.ResultUtils;
+import com.zenith.qa.common.*;
 import com.zenith.qa.constant.UserConstant;
 import com.zenith.qa.exception.BusinessException;
 import com.zenith.qa.exception.ThrowUtils;
@@ -25,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import java.util.Date;
 
 /**
  * 应用接口
@@ -180,6 +178,8 @@ public class AppController {
         long size = appQueryRequest.getPageSize();
         // 限制爬虫
         ThrowUtils.throwIf(size > 20, ErrorCode.PARAMS_ERROR);
+        //只能看到过审的
+        appQueryRequest.setAppType(ReviewStatusEnum.APPROVED.getCode());
         // 查询数据库
         Page<App> appPage = appService.page(new Page<>(current, size),
                 appService.getQueryWrapper(appQueryRequest));
@@ -247,4 +247,37 @@ public class AppController {
     }
 
     // endregion
+    @PostMapping("/review")
+    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    public BaseResponse<Boolean> doAppReview(@RequestBody ReviewRequest reviewRequest, HttpServletRequest request) {
+        ThrowUtils.throwIf(reviewRequest == null, ErrorCode.PARAMS_ERROR);
+        Long id = reviewRequest.getId();
+        Integer reviewStatus = reviewRequest.getReviewStatus();
+        String reviewMessage = reviewRequest.getReviewMessage();
+
+        // 数据校验
+        // check status
+        ReviewStatusEnum enumByCode = ReviewStatusEnum.getEnumByCode(reviewStatus);
+        // 判断不为空，否则抛出参数异常
+        ThrowUtils.throwIf(id == null || enumByCode == null, ErrorCode.PARAMS_ERROR);
+
+        // 判断是否存在
+        App oldApp = appService.getById(id);
+        ThrowUtils.throwIf(oldApp == null, ErrorCode.NOT_FOUND_ERROR);
+
+        // 已是该状态,使用ThrowUtils.throwIf抛出异常
+        ThrowUtils.throwIf(reviewStatus == oldApp.getReviewStatus(), ErrorCode.PARAMS_ERROR, "请勿重复审核");
+        // 编写代码更新审核状码
+        boolean update = appService.update()
+                .eq("id", id)
+                .set("reviewStatus", reviewStatus)
+                .set("reviewMessage", reviewMessage)
+                .set("reviewTime", new Date())
+                .set("reviewerId", userService.getLoginUser(request).getId())
+                .update();
+        // 如果没有更新成功抛出异常
+        ThrowUtils.throwIf(!update, ErrorCode.OPERATION_ERROR);
+        return ResultUtils.success(true);
+    }
+
 }

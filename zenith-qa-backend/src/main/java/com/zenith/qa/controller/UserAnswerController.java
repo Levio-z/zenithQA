@@ -17,6 +17,8 @@ import com.zenith.qa.model.dto.useranswer.UserAnswerUpdateRequest;
 import com.zenith.qa.model.entity.User;
 import com.zenith.qa.model.entity.UserAnswer;
 import com.zenith.qa.model.vo.UserAnswerVO;
+import com.zenith.qa.scoring.ScoringStrategyExecutor;
+import com.zenith.qa.service.AppService;
 import com.zenith.qa.service.UserAnswerService;
 import com.zenith.qa.service.UserService;
 import lombok.extern.slf4j.Slf4j;
@@ -43,6 +45,12 @@ public class UserAnswerController {
     @Resource
     private UserService userService;
 
+    @Resource
+    private ScoringStrategyExecutor scoringStrategyExecutor;
+
+    @Resource
+    private AppService appService;
+
     // region 增删改查
 
     /**
@@ -53,7 +61,7 @@ public class UserAnswerController {
      * @return
      */
     @PostMapping("/add")
-    public BaseResponse<Long> addUserAnswer(@RequestBody UserAnswerAddRequest userAnswerAddRequest, HttpServletRequest request) {
+    public BaseResponse<Long> addUserAnswer(@RequestBody UserAnswerAddRequest userAnswerAddRequest, HttpServletRequest request) throws Exception {
 
         ThrowUtils.throwIf(userAnswerAddRequest == null, ErrorCode.PARAMS_ERROR);
         // 在此处将实体类和 DTO 进行转换
@@ -71,6 +79,16 @@ public class UserAnswerController {
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
         // 返回新写入的数据 id
         long newUserAnswerId = userAnswer.getId();
+        // 调用评分策略
+        try {
+            UserAnswer userAnswerWithResult = scoringStrategyExecutor.doScore(choices, appService.getById(userAnswer.getAppId()));
+            userAnswerWithResult.setId(newUserAnswerId);
+            //更新数据库
+            userAnswerService.updateById(userAnswerWithResult);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new BusinessException(ErrorCode.OPERATION_ERROR,"调用评分模块失败");
+        }
         return ResultUtils.success(newUserAnswerId);
     }
 
